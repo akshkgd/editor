@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>HTML/CSS/JS Editor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {}
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+  <style>
+    /* Hide all scrollbars */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .editor-container .monaco-editor .margin,
+    .editor-container .monaco-editor .lines-content {
+      border-top: none !important;
+      border-bottom: none !important;
+    }
+
+    .monaco-editor .cursor {
+      border-left: 2px solid #000 !important;
+    }
+
+    /* Monaco editor line highlighting */
+    .monaco-editor .current-line,
+    .monaco-editor .view-overlays .current-line {
+      border: none !important;
+      background-color: #f5f5f5 !important;
+    }
+
+    /* Hide the overview ruler containers */
+    .monaco-editor .decorationsOverviewRuler,
+    .monaco-editor .overview-ruler,
+    .monaco-editor .visible {
+      display: none !important;
+      width: 0 !important;
+    }
+
+    /* Full screen styles */
+    .fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      background-color: white;
+    }
+
+    /* Editor tabs */
+    .editor-tab {
+      cursor: pointer;
+      padding: 8px 16px;
+      border-bottom: 2px solid transparent;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .editor-tab:hover {
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    .editor-tab.active {
+      border-bottom-color: #000;
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .editor-container {
+      transition: height 0.3s ease;
+    }
+
+    /* Preview iframe */
+    #preview-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Editor resize handle */
+    .resize-handle {
+      cursor: row-resize;
+      height: 4px;
+      background-color: #f3f4f6;
+      transition: background-color 0.2s ease;
+    }
+
+    .resize-handle:hover {
+      background-color: #e5e7eb;
+    }
+
+    /* Media queries for mobile responsiveness */
+    @media (max-width: 768px) {
+      .view-tabs {
+        display: flex;
+        overflow-x: auto;
+      }
+    }
+
+    /* Preview tabs */
+    .preview-tab {
+      cursor: pointer;
+      padding: 8px 16px;
+      border-bottom: 2px solid transparent;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .preview-tab:hover {
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    .preview-tab.active {
+      border-bottom-color: #000;
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Console styles */
+    #console-output {
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 0;
+      height: 100%;
+      overflow-y: auto;
+      background-color: #ffffff;
+      color: #1f2937;
+    }
+
+    .console-line {
+      padding: 6px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .console-line:hover {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .log-info {
+      color: #1f2937;
+    }
+
+    .log-warn {
+      color: #d97706;
+    }
+
+    .log-error {
+      color: #dc2626;
+    }
+
+    .log-system {
+      color: #4b5563;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body class="bg-white text-black font-sans">
+  <div class="flex flex-col h-screen" id="container">
+    <!-- Header -->
+    <header class="flex items-center justify-between px-6 h-14 border-b">
+      <h1 class="text-lg font-semibold">HTML/CSS/JS Editor</h1>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <button class="p-2 rounded-full hover:bg-gray-100" onclick="resetEditor()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button class="p-2 rounded-full hover:bg-gray-100" id="fullscreenBtn" onclick="toggleFullscreen()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium">Auto Run</span>
+          <label class="inline-flex items-center cursor-pointer">
+            <div class="relative">
+              <input type="checkbox" id="autorun" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+            </div>
+          </label>
+        </div>
+        <button onclick="runCode()" class="bg-black text-white px-4 py-2 rounded-lg hover:bg-neutral-900">
+          Run
+        </button>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+      <!-- Editor Section -->
+      <div class="flex flex-col w-full md:w-1/2 h-full border-r">
+        <!-- Editor Tabs -->
+        <div class="flex border-b bg-gray-50" id="editor-tabs">
+          <div class="editor-tab active" data-editor="html">HTML</div>
+          <div class="editor-tab" data-editor="css">CSS</div>
+          <div class="editor-tab" data-editor="js">JavaScript</div>
+        </div>
+        
+        <!-- Editor Containers -->
+        <div class="flex-1 relative">
+          <div id="html-editor" class="editor-container absolute inset-0"></div>
+          <div id="css-editor" class="editor-container absolute inset-0 hidden"></div>
+          <div id="js-editor" class="editor-container absolute inset-0 hidden"></div>
+        </div>
+      </div>
+
+      <!-- Preview Section -->
+      <div class="w-full md:w-1/2 h-full bg-white flex flex-col">
+        <!-- Preview Tabs -->
+        <div class="flex border-b bg-gray-50">
+          <div class="preview-tab active" data-preview="output">Output</div>
+          <div class="preview-tab" data-preview="terminal">Console</div>
+        </div>
+        
+        <!-- Preview Containers -->
+        <div class="flex-1 relative">
+          <div id="preview-container" class="absolute inset-0">
+            <iframe id="preview-iframe" sandbox="allow-scripts" srcdoc=""></iframe>
+          </div>
+          <div id="console-container" class="absolute inset-0 hidden">
+            <div id="console-output"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Default code templates - defined as concatenated strings to avoid multiline issues
+    const DEFAULT_HTML = 
+      '<!DOCTYPE html>\n' +
+      '<html>\n' +
+      '<head>\n' +
+      '  <meta charset="UTF-8">\n' +
+      '  <title>My Web Page</title>\n' +
+      '</head>\n' +
+      '<body>\n' +
+      '  <h1>Hello, World!</h1>\n' +
+      '  <p>Welcome to my web page!</p>\n' +
+      '</body>\n' +
+      '</html>';
+
+    const DEFAULT_CSS = 
+      '/* Add your CSS styles here */\n' +
+      'body {\n' +
+      '  font-family: Arial, sans-serif;\n' +
+      '  line-height: 1.6;\n' +
+      '  margin: 0;\n' +
+      '  padding: 20px;\n' +
+      '  background-color: #f8f9fa;\n' +
+      '}\n\n' +
+      'h1 {\n' +
+      '  color: #333;\n' +
+      '  border-bottom: 2px solid #ddd;\n' +
+      '  padding-bottom: 10px;\n' +
+      '}';
+
+    const DEFAULT_JS = 
+      '// Add your JavaScript code here\n' +
+      'document.addEventListener("DOMContentLoaded", function() {\n' +
+      '  console.log("Page loaded!");\n' +
+      '  \n' +
+      '  // Example: Change heading color when clicked\n' +
+      '  const heading = document.querySelector("h1");\n' +
+      '  if (heading) {\n' +
+      '    heading.addEventListener("click", function() {\n' +
+      '      this.style.color = getRandomColor();\n' +
+      '    });\n' +
+      '  }\n' +
+      '  \n' +
+      '  function getRandomColor() {\n' +
+      '    const letters = "0123456789ABCDEF";\n' +
+      '    let color = "#";\n' +
+      '    for (let i = 0; i < 6; i++) {\n' +
+      '      color += letters[Math.floor(Math.random() * 16)];\n' +
+      '    }\n' +
+      '    return color;\n' +
+      '  }\n' +
+      '});';
+
+    // Editor instances
+    let htmlEditor, cssEditor, jsEditor;
+    let currentEditor = 'html';
+    let autoRunTimeout;
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+      const container = document.getElementById('container');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      
+      if (container.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        container.classList.remove('fullscreen');
+        fullscreenBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>';
+        
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      } else {
+        // Enter fullscreen
+        container.classList.add('fullscreen');
+        fullscreenBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+        
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (container.mozRequestFullScreen) {
+          container.mozRequestFullScreen();
+        } else if (container.msRequestFullscreen) {
+          container.msRequestFullscreen();
+        }
+      }
+      
+      // Trigger layout resize after fullscreen change
+      setTimeout(function() {
+        if (htmlEditor) htmlEditor.layout();
+        if (cssEditor) cssEditor.layout();
+        if (jsEditor) jsEditor.layout();
+      }, 100);
+    }
+    
+    // Reset editors to default code
+    function resetEditor() {
+      if (htmlEditor) htmlEditor.setValue(DEFAULT_HTML);
+      if (cssEditor) cssEditor.setValue(DEFAULT_CSS);
+      if (jsEditor) jsEditor.setValue(DEFAULT_JS);
+      runCode();
+    }
+
+    // Tab switching
+    document.getElementById('editor-tabs').addEventListener('click', function(e) {
+      if (e.target.classList.contains('editor-tab')) {
+        const editorType = e.target.dataset.editor;
+        switchEditor(editorType);
+      }
+    });
+
+    function switchEditor(editorType) {
+      // Update active tab
+      document.querySelectorAll('.editor-tab').forEach(function(tab) {
+        tab.classList.toggle('active', tab.dataset.editor === editorType);
+      });
+      
+      // Show selected editor
+      document.getElementById('html-editor').classList.toggle('hidden', editorType !== 'html');
+      document.getElementById('css-editor').classList.toggle('hidden', editorType !== 'css');
+      document.getElementById('js-editor').classList.toggle('hidden', editorType !== 'js');
+      
+      currentEditor = editorType;
+      
+      // Layout update
+      if (editorType === 'html' && htmlEditor) htmlEditor.layout();
+      if (editorType === 'css' && cssEditor) cssEditor.layout();
+      if (editorType === 'js' && jsEditor) jsEditor.layout();
+    }
+
+    // Initialize Monaco Editor
+    require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function() {
+      // Configure Monaco editor globally
+      monaco.editor.defineTheme('customTheme', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': '#FFFFFF',
+          'editor.lineHighlightBackground': '#f5f5f5',
+        }
+      });
+      
+      // Set global editor options
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.Latest,
+        allowNonTsExtensions: true,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        noEmit: true
+      });
+      
+      // Set global suggestion settings
+      monaco.editor.EditorOptions.snippetSuggestions.defaultValue = 'top';
+      monaco.editor.EditorOptions.suggestSelection.defaultValue = 'first';
+      monaco.editor.EditorOptions.tabCompletion.defaultValue = 'on';
+      
+      // Common editor options
+      const commonEditorOptions = {
+        theme: 'customTheme',
+        fontSize: 16,
+        automaticLayout: true,
+        minimap: { enabled: false },
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        overviewRulerBorder: false,
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        renderLineHighlight: 'all',
+        lineHighlightBackground: '#f5f5f5',
+        scrollbar: {
+          vertical: 'hidden',
+          horizontal: 'hidden'
+        },
+        // Enhanced suggestion settings
+        suggestSelection: 'first',
+        wordBasedSuggestions: 'on',
+        suggestOnTriggerCharacters: true,
+        acceptSuggestionOnEnter: 'on',
+        acceptSuggestionOnCommitCharacter: true,
+        quickSuggestions: {
+          other: true,
+          comments: true,
+          strings: true
+        },
+        quickSuggestionsDelay: 0,
+        snippetSuggestions: 'top',
+        tabCompletion: 'on',
+        suggest: {
+          filterGraceful: true,
+          snippetsPreventQuickSuggestions: false,
+          localityBonus: true,
+          shareSuggestSelections: true,
+          showIcons: true,
+          maxVisibleSuggestions: 15,
+          showMethods: true,
+          showFunctions: true,
+          showVariables: true,
+          showClasses: true,
+          showProperties: true,
+          showWords: true,
+          showInlineDetails: true,
+          preview: true,
+          previewMode: 'prefix',
+          selectionMode: 'always'
+        },
+        parameterHints: {
+          enabled: true,
+          cycle: true
+        }
+      };
+      
+      // HTML Editor
+      htmlEditor = monaco.editor.create(document.getElementById('html-editor'), {
+        ...commonEditorOptions,
+        value: DEFAULT_HTML,
+        language: 'html',
+      });
+
+      // CSS Editor
+      cssEditor = monaco.editor.create(document.getElementById('css-editor'), {
+        ...commonEditorOptions,
+        value: DEFAULT_CSS,
+        language: 'css',
+      });
+
+      // JavaScript Editor
+      jsEditor = monaco.editor.create(document.getElementById('js-editor'), {
+        ...commonEditorOptions,
+        value: DEFAULT_JS,
+        language: 'javascript',
+      });
+
+      // Setup auto-run on editor content change
+      htmlEditor.onDidChangeModelContent(function() {
+        if (document.getElementById("autorun").checked) {
+          clearTimeout(autoRunTimeout);
+          autoRunTimeout = setTimeout(runCode, 500);
+        }
+      });
+
+      cssEditor.onDidChangeModelContent(function() {
+        if (document.getElementById("autorun").checked) {
+          clearTimeout(autoRunTimeout);
+          autoRunTimeout = setTimeout(runCode, 500);
+        }
+      });
+
+      jsEditor.onDidChangeModelContent(function() {
+        if (document.getElementById("autorun").checked) {
+          clearTimeout(autoRunTimeout);
+          autoRunTimeout = setTimeout(runCode, 500);
+        }
+      });
+
+      // Auto-run on initial load
+      setTimeout(runCode, 500);
+      
+      // Setup preview tab switching
+      document.querySelectorAll('.preview-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          const previewType = this.dataset.preview;
+          switchPreview(previewType);
+        });
+      });
+    });
+
+    // Switch between preview types (output/terminal)
+    function switchPreview(previewType) {
+      // Update active tab
+      document.querySelectorAll('.preview-tab').forEach(function(tab) {
+        tab.classList.toggle('active', tab.dataset.preview === previewType);
+      });
+      
+      // Show selected preview
+      document.getElementById('preview-container').classList.toggle('hidden', previewType !== 'output');
+      document.getElementById('console-container').classList.toggle('hidden', previewType !== 'terminal');
+    }
+
+    function runCode() {
+      if (!htmlEditor || !cssEditor || !jsEditor) return;
+      
+      const html = htmlEditor.getValue();
+      const css = cssEditor.getValue();
+      const js = jsEditor.getValue();
+      
+      const previewFrame = document.getElementById('preview-iframe');
+      const consoleOutput = document.getElementById('console-output');
+      
+      try {
+        // Clear iframe and console
+        previewFrame.srcdoc = '';
+        consoleOutput.innerHTML = '';
+        
+        // Add initial system message to console
+        addConsoleMessage('Running code...', 'system');
+        
+        // Create complete HTML document with CSS and JS
+        let combinedContent = html;
+        
+        // If HTML doesn't contain <head> or <body>, we need to wrap it
+        if (!combinedContent.includes('<head>')) {
+          // Build the HTML manually in a safer way
+          const safeDoctype = '<!DOCTYPE html>';
+          const safeHtmlOpen = '<html>';
+          const safeHtmlClose = '</html>';
+          const safeHeadOpen = '<head>';
+          const safeHeadContent = '  <meta charset="UTF-8">\n  <title>Preview</title>';
+          const safeStyleOpen = '  <style>';
+          const safeStyleClose = '  </style>';
+          const safeHeadClose = '</head>';
+          const safeBodyOpen = '<body>';
+          const safeBodyContent = '  ' + combinedContent;
+          
+          // Add console capture to JS
+          const consoleCapture = 
+            '// Capture console output\n' +
+            '(function() {\n' +
+            '  const originalConsole = console;\n' +
+            '  console = {\n' +
+            '    log: function() {\n' + 
+            '      originalConsole.log.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "log", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    },\n' +
+            '    warn: function() {\n' +
+            '      originalConsole.warn.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "warn", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    },\n' +
+            '    error: function() {\n' +
+            '      originalConsole.error.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "error", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    }\n' +
+            '  };\n' +
+            '  \n' +
+            '  // Capture errors\n' +
+            '  window.addEventListener("error", function(e) {\n' +
+            '    try {\n' +
+            '      window.parent.postMessage({\n' +
+            '        type: "console",\n' + 
+            '        method: "error", \n' +
+            '        args: ["Error: " + e.message + " at line " + e.lineno + ":" + e.colno]\n' +
+            '      }, "*");\n' +
+            '    } catch(err) {}\n' +
+            '  });\n' +
+            '})();\n\n' +
+            js;
+          
+          const safeScriptOpen = '  <scr' + 'ipt>';
+          const safeScriptClose = '  </scr' + 'ipt>';
+          const safeBodyClose = '</body>';
+          
+          combinedContent = [
+            safeDoctype,
+            safeHtmlOpen,
+            safeHeadOpen,
+            safeHeadContent,
+            safeStyleOpen,
+            css,
+            safeStyleClose,
+            safeHeadClose,
+            safeBodyOpen,
+            safeBodyContent,
+            safeScriptOpen,
+            consoleCapture,
+            safeScriptClose,
+            safeBodyClose,
+            safeHtmlClose
+          ].join('\n');
+        } else {
+          // Inject CSS in the head
+          let styleTag = '<style>' + css + '</style>';
+          combinedContent = combinedContent.replace('</head>', styleTag + '</head>');
+          
+          // Add console capture to JS
+          const consoleCapture = 
+            '// Capture console output\n' +
+            '(function() {\n' +
+            '  const originalConsole = console;\n' +
+            '  console = {\n' +
+            '    log: function() {\n' + 
+            '      originalConsole.log.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "log", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    },\n' +
+            '    warn: function() {\n' +
+            '      originalConsole.warn.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "warn", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    },\n' +
+            '    error: function() {\n' +
+            '      originalConsole.error.apply(originalConsole, arguments);\n' +
+            '      try {\n' +
+            '        window.parent.postMessage({type: "console", method: "error", args: Array.from(arguments).map(a => String(a))}, "*");\n' +
+            '      } catch(e) {}\n' +
+            '    }\n' +
+            '  };\n' +
+            '  \n' +
+            '  // Capture errors\n' +
+            '  window.addEventListener("error", function(e) {\n' +
+            '    try {\n' +
+            '      window.parent.postMessage({\n' +
+            '        type: "console",\n' + 
+            '        method: "error", \n' +
+            '        args: ["Error: " + e.message + " at line " + e.lineno + ":" + e.colno]\n' +
+            '      }, "*");\n' +
+            '    } catch(err) {}\n' +
+            '  });\n' +
+            '})();\n\n' +
+            js;
+          
+          // Inject JS before the body end - split script tags to avoid issues
+          let scriptTag = '<scr' + 'ipt>' + consoleCapture + '</scr' + 'ipt>';
+          combinedContent = combinedContent.replace('</body>', scriptTag + '</body>');
+        }
+        
+        // Use srcdoc to update the iframe content
+        previewFrame.srcdoc = combinedContent;
+        
+        // Add success message to console
+        setTimeout(function() {
+          addConsoleMessage('Code executed successfully', 'system');
+        }, 500);
+      } catch (e) {
+        console.error('Error updating preview:', e);
+        addConsoleMessage('Error: ' + e.message, 'error');
+      }
+    }
+    
+    // Add a message to the console output
+    function addConsoleMessage(message, type = 'info') {
+      const consoleOutput = document.getElementById('console-output');
+      const line = document.createElement('div');
+      line.className = 'console-line log-' + type;
+      
+      // Format the message appropriately
+      if (typeof message === 'object') {
+        try {
+          message = JSON.stringify(message, null, 2);
+        } catch (e) {
+          message = String(message);
+        }
+      }
+      
+      line.textContent = message;
+      consoleOutput.appendChild(line);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+    
+    // Listen for messages from the iframe (console logs)
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'console') {
+        const method = event.data.method || 'log';
+        const args = event.data.args || [];
+        
+        args.forEach(function(arg) {
+          addConsoleMessage(arg, method);
+        });
+      }
+    });
+
+    // Handle fullscreen change events
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    function handleFullscreenChange() {
+      const container = document.getElementById('container');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      
+      if (!document.fullscreenElement && 
+          !document.webkitFullscreenElement && 
+          !document.mozFullScreenElement && 
+          !document.msFullscreenElement) {
+        container.classList.remove('fullscreen');
+        fullscreenBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>';
+      }
+      
+      // Trigger layout resize
+      setTimeout(function() {
+        if (htmlEditor) htmlEditor.layout();
+        if (cssEditor) cssEditor.layout();
+        if (jsEditor) jsEditor.layout();
+      }, 100);
+    }
+
+    // Local storage handling
+    function saveToLocalStorage() {
+      try {
+        if (htmlEditor && cssEditor && jsEditor) {
+          localStorage.setItem('html-editor', htmlEditor.getValue());
+          localStorage.setItem('css-editor', cssEditor.getValue());
+          localStorage.setItem('js-editor', jsEditor.getValue());
+        }
+      } catch (e) {
+        console.error('Error saving to localStorage:', e);
+      }
+    }
+
+    function loadFromLocalStorage() {
+      try {
+        const savedHtml = localStorage.getItem('html-editor');
+        const savedCss = localStorage.getItem('css-editor');
+        const savedJs = localStorage.getItem('js-editor');
+        
+        if (savedHtml && htmlEditor) htmlEditor.setValue(savedHtml);
+        if (savedCss && cssEditor) cssEditor.setValue(savedCss);
+        if (savedJs && jsEditor) jsEditor.setValue(savedJs);
+        
+        if ((savedHtml || savedCss || savedJs) && htmlEditor && cssEditor && jsEditor) {
+          runCode();
+        }
+      } catch (e) {
+        console.error('Error loading from localStorage:', e);
+      }
+    }
+
+    // Save to local storage every 30 seconds
+    setInterval(saveToLocalStorage, 30000);
+    
+    // When the page is about to unload, save content
+    window.addEventListener('beforeunload', saveToLocalStorage);
+    
+    // After editors are initialized, try to load saved content
+    window.addEventListener('load', function() {
+      const checkEditorsLoaded = setInterval(function() {
+        if (htmlEditor && cssEditor && jsEditor) {
+          clearInterval(checkEditorsLoaded);
+          setTimeout(loadFromLocalStorage, 500);
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

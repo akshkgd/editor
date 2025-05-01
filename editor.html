@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JS Compiler</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+  <style>
+    /* Hide all scrollbars */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    #editor .monaco-editor .margin,
+    #editor .monaco-editor .lines-content {
+      border-top: none !important;
+      border-bottom: none !important;
+    }
+    .monaco-editor .cursor {
+      border-left: 2px solid #000 !important;
+    }
+
+    /* Monaco editor line highlighting */
+    .monaco-editor .current-line,
+    .monaco-editor .view-overlays .current-line {
+      border: none !important;
+      background-color: #f5f5f5 !important;
+    }
+
+    /* Console styles */
+    .console-line {
+      padding: 8px 12px;
+      border-bottom: none;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .console-line:hover {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .log-info {
+      color: #1f2937;
+    }
+
+    .log-warn {
+      color: #d97706;
+    }
+
+    .log-error {
+      color: #dc2626;
+    }
+
+    .object-preview {
+      color: #4b5563;
+    }
+
+    #output {
+      background-color: #ffffff;
+      border-radius:0;
+    }
+    
+    /* Full screen styles */
+    .fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      background-color: white;
+    }
+
+    /* Error styles */
+    .error-header {
+      display: flex;
+      align-items: flex-start;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .error-type {
+      font-weight: 500;
+      margin-right: 8px;
+      color: #dc2626;
+    }
+
+    .error-message {
+      color: #dc2626;
+      word-break: break-word;
+    }
+
+    .error-location {
+      color: #6b7280;
+      font-size: 14px;
+      margin-left: 4px;
+      white-space: nowrap;
+    }
+
+    .error-stack {
+      display: none;
+      padding-left: 24px;
+      margin-top: 6px;
+      color: #6b7280;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .arrow-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      transition: transform 0.2s;
+      line-height: 1;
+      color: #dc2626;
+    }
+
+    .arrow-expanded {
+      transform: rotate(90deg);
+    }
+
+    .decorationsOverviewRuler{
+      display: none !important;
+    }
+    
+    /* Hide the overview ruler containers as well */
+    .monaco-editor .decorationsOverviewRuler,
+    .monaco-editor .overview-ruler,
+    .monaco-editor .visible {
+      display: none !important;
+      width: 0 !important;
+    }
+
+    /* Main layout improvements for small screens */
+    @media (max-width: 768px) {
+      .console-line {
+        padding: 8px 12px;
+      }
+
+      #output {
+        padding: 0;
+      }
+    }
+
+    /* Output panel styling */
+    .output-panel {
+      border-left: 1px solid #e5e7eb;
+      background-color: white;
+    }
+
+    .output-header {
+      background-color: white;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+    }
+
+    .toggle-switch {
+      background-color: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 9999px;
+      padding: 2px;
+    }
+
+    .toggle-switch.active {
+      background-color: #000;
+    }
+  </style>
+</head>
+<body class="bg-white text-black font-sans">
+  <div class="flex flex-col h-screen" id="container">
+    <!-- Header -->
+    <header class="flex items-center justify-between px-6 h-14 border-b">
+      <h1 class="text-lg font-semibold">Javascript Online Compiler</h1>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <button class="p-2 rounded-full hover:bg-gray-100" onclick="resetEditor()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button class="p-2 rounded-full hover:bg-gray-100" id="fullscreenBtn" onclick="toggleFullscreen()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium">Auto Run</span>
+          <label class="inline-flex items-center cursor-pointer">
+            <div class="relative">
+              <input type="checkbox" id="autorun" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+            </div>
+          </label>
+        </div>
+        <button onclick="runCode()" class="bg-black text-white px-4 py-2 rounded-lg hover:bg-neutral-900">
+          Run Code
+        </button>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+      <!-- Editor -->
+      <div id="editor" class="w-full md:w-2/3 h-[50vh] md:h-full pt-2"></div>
+
+      <!-- Output Panel -->
+      <div class="w-full md:w-1/3 h-[50vh] md:h-full output-panel">
+        <div class="output-header">
+          <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span class="font-medium text-sm">Output</span>
+          </div>
+        </div>
+        <div id="output-panel" class="p-0 h-[calc(100%-48px)]">
+          <div id="output" class="h-full overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Default code template
+    const DEFAULT_CODE = `// Online Javascript Editor for free
+// Write, Edit and Run your Javascript code using JS Online Compiler
+
+console.log("Hello, World!");`;
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+      const container = document.getElementById('container');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      
+      if (container.classList.contains('fullscreen')) {
+        // Exit fullscreen
+        container.classList.remove('fullscreen');
+        fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+        </svg>`;
+        
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      } else {
+        // Enter fullscreen
+        container.classList.add('fullscreen');
+        fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>`;
+        
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (container.mozRequestFullScreen) {
+          container.mozRequestFullScreen();
+        } else if (container.msRequestFullscreen) {
+          container.msRequestFullscreen();
+        }
+      }
+      
+      // Trigger layout resize after fullscreen change
+      setTimeout(() => {
+        if (window.editor) {
+          window.editor.layout();
+        }
+      }, 100);
+    }
+    
+    // Reset editor to default code
+    function resetEditor() {
+      if (window.editor) {
+        window.editor.setValue(DEFAULT_CODE);
+        document.getElementById("output").innerHTML = "";
+        runCode();
+      }
+    }
+
+    require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      window.editor = monaco.editor.create(document.getElementById('editor'), {
+        value: DEFAULT_CODE,
+        language: 'javascript',
+        theme: 'vs-light',
+        fontSize: 16,
+        automaticLayout: true,
+        minimap: { enabled: false },
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        overviewRulerBorder: false,
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        renderLineHighlight: 'all',
+        lineHighlightBackground: '#f5f5f5',
+        scrollbar: {
+          vertical: 'hidden',
+          horizontal: 'hidden'
+        }
+      });
+
+      // Auto-run on initial load
+      setTimeout(runCode, 500);
+      
+      // Setup auto-run on content change
+      let autoRunTimeout;
+      editor.onDidChangeModelContent(() => {
+        if (document.getElementById("autorun").checked) {
+          clearTimeout(autoRunTimeout);
+          autoRunTimeout = setTimeout(runCode, 500);
+        }
+      });
+    });
+
+    function formatValue(value) {
+      if (typeof value === 'object' && value !== null) {
+        return `<span class="object-preview">${JSON.stringify(value, null, 2)}</span>`;
+      }
+      if (typeof value === 'string') {
+        return `<span>${value}</span>`;
+      }
+      return `<span>${JSON.stringify(value)}</span>`;
+    }
+
+    function addConsoleLine(type, ...args) {
+      const outputEl = document.getElementById("output");
+      const line = document.createElement("div");
+      line.className = `console-line log-${type}`;
+      
+      const content = document.createElement("span");
+      content.innerHTML = args.map(formatValue).join(" ");
+      
+      line.appendChild(content);
+      outputEl.appendChild(line);
+      outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    function addErrorLine(err) {
+      const outputEl = document.getElementById("output");
+      
+      // Create main error line
+      const line = document.createElement("div");
+      line.className = "console-line log-error";
+      
+      // Create error header (clickable)
+      const errorHeader = document.createElement("div");
+      errorHeader.className = "error-header";
+      
+      // Add arrow icon
+      const arrow = document.createElement("span");
+      arrow.className = "arrow-icon";
+      arrow.innerHTML = "▶";
+      errorHeader.appendChild(arrow);
+      
+      // Error container for type and message
+      const errorContainer = document.createElement("div");
+      errorContainer.style.flex = "1";
+      
+      // Extract error information
+      const errorType = document.createElement("span");
+      errorType.className = "error-type";
+      errorType.textContent = err.name || "Error";
+      
+      const errorMessage = document.createElement("span");
+      errorMessage.className = "error-message";
+      errorMessage.textContent = err.message;
+      
+      // Extract line number and file info from the stack
+      let lineInfo = "";
+      let columnInfo = "";
+      
+      if (err.stack) {
+        const stackLines = err.stack.split('\n');
+        if (stackLines.length > 1) {
+          const match = stackLines[1].match(/<anonymous>:(\d+):(\d+)/);
+          if (match) {
+            lineInfo = match[1];
+            columnInfo = match[2];
+          }
+        }
+      }
+      
+      // Create location info
+      const errorLocation = document.createElement("span");
+      errorLocation.className = "error-location";
+      if (lineInfo) {
+        errorLocation.textContent = `(line: ${lineInfo}, column: ${columnInfo})`;
+      }
+      
+      // Layout error in a cleaner format
+      errorContainer.appendChild(errorType);
+      errorContainer.appendChild(errorMessage);
+      errorContainer.appendChild(errorLocation);
+      
+      errorHeader.appendChild(errorContainer);
+      
+      // Create stack trace (hidden by default)
+      const stackTrace = document.createElement("div");
+      stackTrace.className = "error-stack";
+      
+      if (err.stack) {
+        stackTrace.textContent = err.stack
+          .split('\n')
+          .map(line => line.trim())
+          .join('\n');
+      }
+      
+      // Toggle stack trace on click
+      errorHeader.addEventListener('click', () => {
+        arrow.classList.toggle('arrow-expanded');
+        stackTrace.style.display = stackTrace.style.display === 'block' ? 'none' : 'block';
+      });
+      
+      line.appendChild(errorHeader);
+      line.appendChild(stackTrace);
+      
+      outputEl.appendChild(line);
+      outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    function runCode() {
+      const code = editor.getValue();
+      const outputEl = document.getElementById("output");
+      outputEl.innerHTML = "";
+
+      const originalConsole = {
+        log: console.log,
+        warn: console.warn,
+        error: console.error,
+        info: console.info
+      };
+
+      console.log = function(...args) {
+        addConsoleLine('info', ...args);
+        originalConsole.log.apply(console, args);
+      };
+
+      console.warn = function(...args) {
+        addConsoleLine('warn', ...args);
+        originalConsole.warn.apply(console, args);
+      };
+
+      console.error = function(...args) {
+        addConsoleLine('error', ...args);
+        originalConsole.error.apply(console, args);
+      };
+
+      console.info = function(...args) {
+        addConsoleLine('info', ...args);
+        originalConsole.info.apply(console, args);
+      };
+
+      try {
+        new Function(code)();
+      } catch (err) {
+        addErrorLine(err);
+      }
+
+      // Restore original console methods
+      Object.assign(console, originalConsole);
+    }
+    
+    // Handle fullscreen change events
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    
+    function handleFullscreenChange() {
+      const container = document.getElementById('container');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
+      
+      if (!document.fullscreenElement && 
+          !document.webkitFullscreenElement && 
+          !document.mozFullScreenElement && 
+          !document.msFullscreenElement) {
+        container.classList.remove('fullscreen');
+        fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+        </svg>`;
+      }
+      
+      setTimeout(() => {
+        if (window.editor) {
+          window.editor.layout();
+        }
+      }, 100);
+    }
+  </script>
+</body>
+</html>
+
+
